@@ -36,11 +36,13 @@
     .lane{
       flex:1;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));border-radius:10px;padding:8px;position:relative;overflow:hidden;border:1px solid var(--glass-2);
       display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+      /* --- NEW: Prevents touch weirdness --- */
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
     }
     .lane .key-label{position:absolute;bottom:10px;font-weight:700;font-size:18px;padding:6px 10px;border-radius:8px;background:linear-gradient(90deg, rgba(255,255,255,0.03), rgba(0,0,0,0.02));backdrop-filter: blur(4px)}
     
-    /* --- UPDATED HIT LINE --- */
-    /* REMOVED .hit-zone */
+    /* --- HIT LINE --- */
     .hit-line{
       position:absolute;
       /* Aligned with lane bottoms */
@@ -71,7 +73,7 @@
       background: linear-gradient(90deg, var(--accent), #5d44c6);
     }
     
-    /* --- NEW: Chord Connector Style --- */
+    /* --- Chord Connector Style --- */
     .note.note-chord {
       /* Adds a white inset glow to all notes in a chord */
       box-shadow: 0 6px 20px rgba(2,6,23,0.5), 0 0 10px 4px rgba(255,255,255,0.7) inset;
@@ -760,10 +762,9 @@
     // --- keyboard listeners ---
     window.addEventListener('keydown',e=>{
       if (e.repeat) return; 
-      if(!running) return;
-      const k = e.key.toLowerCase();
       
-      if(k===' '){ 
+      // --- FIX: Allow spacebar to work even if paused ---
+      if(e.key.toLowerCase()===' '){ 
         running = !running; 
         pauseBtn.innerText = running? 'Pause' : 'Resume'; 
         if (running) {
@@ -775,11 +776,27 @@
         return; 
       }
       
+      if(!running) return; // Stop other keys if paused
+      
+      const k = e.key.toLowerCase();
       const idx = KEYS.indexOf(k);
       if(idx !== -1){
         handleKeyPress(idx);
       }
     });
+    
+    // --- NEW: Touchscreen Listeners ---
+    lanes.forEach((lane, idx) => {
+      // Use 'touchstart' for immediate response on mobile
+      lane.addEventListener('touchstart', (e) => {
+        // Prevent scrolling or "ghost clicks"
+        e.preventDefault();
+        if(running) {
+          handleKeyPress(idx);
+        }
+      }, { passive: false }); // 'passive: false' is needed for preventDefault()
+    });
+
     
     pauseBtn.addEventListener('click',()=>{ 
       running = !running; 
