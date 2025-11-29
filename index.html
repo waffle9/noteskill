@@ -1,0 +1,956 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Minimal Rhythm — DFJK</title>
+  <style>
+    :root{
+      --bg1:#0f1724; /* deep navy */
+      --bg2:#071033; /* midnight */
+      --accent:#7c5cff; /* purple */
+      --accent2:#22d3ee; /* cyan */
+      --panel:#0b1220;
+      --glass: rgba(255,255,255,0.04);
+      --glass-2: rgba(255,255,255,0.02);
+      --font: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue";
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:var(--font);background:linear-gradient(160deg,var(--bg1),var(--bg2));color:#e6eef8}
+    .app{
+      min-height:100vh;display:flex;align-items:center;justify-content:center;padding:28px;
+    }
+    .card{
+      width:980px;max-width:96vw;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:16px;
+      /* --- Glow Added --- */
+      box-shadow: 0 8px 40px rgba(2,6,23,0.7), 0 0 20px rgba(34,211,238,0.3);
+      padding:20px;display:grid;grid-template-columns:1fr 300px;gap:18px;align-items:start;
+    }
+    .stage{
+      position:relative;height:620px;background:linear-gradient(180deg, rgba(255,255,255,0.015), transparent);border-radius:12px;overflow:hidden;border:1px solid var(--glass);
+      display:flex;align-items:flex-end;justify-content:center;
+      /* This padding creates the 90px "floor" */
+      padding-bottom: 90px;
+    }
+    .lane-wrap{position:relative;width:82%;height:100%;display:flex;gap:10px}
+    .lane{
+      flex:1;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));border-radius:10px;padding:8px;position:relative;overflow:hidden;border:1px solid var(--glass-2);
+      display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+    }
+    .lane .key-label{position:absolute;bottom:10px;font-weight:700;font-size:18px;padding:6px 10px;border-radius:8px;background:linear-gradient(90deg, rgba(255,255,255,0.03), rgba(0,0,0,0.02));backdrop-filter: blur(4px)}
+    
+    /* --- UPDATED HIT LINE --- */
+    /* REMOVED .hit-zone */
+    .hit-line{
+      position:absolute;
+      /* Aligned with lane bottoms */
+      bottom: 90px; 
+      left:0;right:0;height:6px;background:linear-gradient(90deg, rgba(124,92,255,0.9), rgba(34,211,238,0.9));box-shadow:0 6px 18px rgba(124,92,255,0.12);opacity:0.95
+    }
+
+    /* --- Note Style --- */
+    .note{
+      width:86%;height:20px;border-radius:8px;margin:8px 0;
+      background:linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+      display:flex;align-items:center;justify-content:center;font-weight:700;color:#0b1220;letter-spacing:0.6px;
+      position:absolute;left:50%;
+      /* This base transform allows JS to override it */
+      transform: translate(-50%, 0); 
+      box-shadow:0 6px 20px rgba(2,6,23,0.5);
+      z-index: 2;
+    }
+    
+    /* Note Color Styles */
+    .note.note-beat { /* Quarter notes */
+      background:linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+    }
+    .note.note-eighth { /* 8th notes */
+      background: linear-gradient(90deg, var(--accent2), #15a3b9);
+    }
+    .note.note-sixteenth { /* 16th notes */
+      background: linear-gradient(90deg, var(--accent), #5d44c6);
+    }
+    
+    /* --- NEW: Chord Connector Style --- */
+    .note.note-chord {
+      /* Adds a white inset glow to all notes in a chord */
+      box-shadow: 0 6px 20px rgba(2,6,23,0.5), 0 0 10px 4px rgba(255,255,255,0.7) inset;
+    }
+
+
+    /* Lane Pulse */
+    .lane-pulse {
+      position: absolute;
+      /* --- FIX: Centered on the bottom of the lane (0px) --- */
+      bottom: -10px; /* (note center 10px) - (pulse height 40px / 2) */
+      left: -10%; width: 120%;
+      height: 40px;
+      background: radial-gradient(circle, rgba(34,211,238,0.5) 0%, transparent 70%);
+      opacity: 0;
+      transform: scale(0.5);
+      pointer-events: none;
+      z-index: 10;
+    }
+    
+    /* Hit Particles */
+    .particle {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 100;
+      background: #fff; /* Default 'Perfect' */
+    }
+
+    /* HUD */
+    .hud{padding:10px 14px;border-radius:12px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border:1px solid var(--glass-2);height:100%;display:flex;flex-direction:column;gap:12px}
+    .panel{padding:12px;border-radius:10px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));border:1px solid var(--glass)}
+    .big-score{font-size:34px;font-weight:800;letter-spacing:0.6px}
+    .small{font-size:13px;opacity:0.85}
+    .stat-row{display:flex;justify-content:space-between;align-items:center}
+    .controls{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+    
+    /* --- Glow Added to Buttons --- */
+    .btn{
+      padding:8px 10px;border-radius:10px;background:transparent;
+      border:1px solid var(--glass);
+      box-shadow: 0 0 8px var(--glass);
+      cursor:pointer;font-weight:700; color:#e6eef8;
+      transition: all 0.2s ease;
+    }
+    .btn:hover {
+      background: var(--glass);
+      box-shadow: 0 0 12px var(--accent2);
+      border-color: var(--accent2);
+    }
+    
+    .muted{opacity:0.6}
+    .footer{margin-top:auto;font-size:12px;opacity:0.7}
+    
+    /* Combo Pop Animation */
+    @keyframes combo-pop {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.3); }
+      100% { transform: scale(1); }
+    }
+    .combo-pop {
+      animation: combo-pop 0.2s ease-out;
+    }
+    
+    /* Slider Styles */
+    .setting-row {
+      display: grid;
+      grid-template-columns: 60px 1fr 50px;
+      align-items: center;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .setting-row label {
+      font-weight: 700;
+      font-size: 14px;
+    }
+    .setting-row span {
+      font-size: 14px;
+      opacity: 0.9;
+      text-align: right;
+    }
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      background: var(--bg1);
+      border-radius: 3px;
+      outline: none;
+      opacity: 0.7;
+      transition: opacity .2s;
+      margin: 0;
+      padding: 0;
+    }
+    input[type="range"]:hover {
+      opacity: 1;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      background: var(--accent2);
+      cursor: pointer;
+      border-radius: 50%;
+      border: 0;
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      background: var(--accent2);
+      cursor: pointer;
+      border-radius: 50%;
+      border: 0;
+    }
+    
+    /* Mode Controls */
+    .mode-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    /* --- Enhanced Glow on Active Button --- */
+    .btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      box-shadow: 0 0 15px var(--accent), 0 0 25px var(--accent);
+    }
+
+    /* visual feedback */
+    .feedback{
+      position:absolute;left:50%;transform:translateX(-50%);
+      bottom: 150px; /* Moved up */
+      font-weight:800;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,0.03);backdrop-filter: blur(6px);
+    }
+
+    /* responsive */
+    @media (max-width:900px){
+      .card{grid-template-columns:1fr;}
+      .stage{height:520px;padding-bottom:78px}
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="card">
+      <div class="stage" id="stage">
+        <div class="lane-wrap" id="lanes">
+          </div>
+        <div class="hit-line"></div>
+        <div class="feedback" id="feedback" style="display:none"></div>
+      </div>
+
+      <aside class="hud">
+        <div class="panel">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div class="small">SCORE</div>
+              <div class="big-score" id="score">0</div>
+            </div>
+            <div style="text-align:right">
+              <div class="small">COMBO</div>
+              <div style="font-weight:800;font-size:22px" id="combo">0</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="panel">
+          <div class="small">PRACTICE MODE</div>
+          <div class="mode-controls">
+            <button class="btn active" id="mode-standard">Standard</button>
+            <button class="btn" id="mode-waves">Waves</button>
+            <button class="btn" id="mode-jacks">Jacks</button>
+            <button class="btn"id="mode-streams">Streams</button>
+            <button class="btn" id="mode-chords">Chords</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="small">SETTINGS</div>
+          
+          <div class="setting-row">
+            <label for="scrollSlider">Scroll</label>
+            <input type="range" id="scrollSlider" min="0.5" max="4.0" step="0.1" value="1.0">
+            <span id="scrollDisplay">1.0x</span>
+          </div>
+
+          <div class="setting-row">
+            <label for="bpmSlider">BPM</label>
+            <input type="range" id="bpmSlider" min="30" max="300" step="1" value="120">
+            <span id="bpmDisplay">120</span>
+          </div>
+          
+          <div class="setting-row">
+            <label for="spreadSlider">Spread</label>
+            <input type="range" id="spreadSlider" min="0.0" max="1.0" step="0.05" value="0.15">
+            <span id="spreadDisplay">15%</span>
+          </div>
+          
+          <div class="controls">
+            <div class="btn muted">D</div>
+            <div class="btn muted">F</div>
+            <div class="btn muted">J</div>
+            <div class="btn muted">K</div>
+            <button class="btn" id="pauseBtn">Pause</button>
+            <button class="btn" id="resetBtn">Reset</button>
+            
+            <button class="btn" id="tapBtn">Tap BPM</button>
+            <button class="btn" id="loadBtn">Load Song</button>
+          </div>
+        </div>
+        <div class="footer">Press D F J K · Infinite, randomized</div>
+      </aside>
+    </div>
+  </div>
+  
+  <input type="file" id="fileInput" accept="audio/mp3,audio/wav" style="display:none" />
+  <audio id="audioPlayer"></audio>
+
+  <script>
+    // ---------- Configuration ----------
+    const KEYS = ['d','f','j','k'];
+    const KEY_LABELS = ['D','F','J','K'];
+    
+    // --- THIS IS THE FIX ---
+    // The hit line is 90px from the stage bottom. The lanes end at 90px.
+    // So the line is at the 0 position of the lane bottom.
+    // We hit the center of the 20px note, so HIT_Y is 10.
+    const HIT_Y = 10; 
+    const SPAWN_Y = -40; // px above screen to spawn notes
+
+    const TIMING = {
+      perfect: 60,
+      great: 120,
+      good: 200,
+      miss: 250 // Max window to interact with a note at all
+    };
+
+    // base speed in pixels per second (note falling velocity)
+    let baseSpeed = 160; 
+    let scrollMultiplier = 1.0; // Controlled by Scroll slider
+
+    // spawn controls
+    let bpm = 120; // Beats Per Minute
+    let spawnInterval = (60 * 1000) / bpm; // ms between spawns (quarter notes)
+    let spreadChance = 0.15; // Base chance for 2-note chord (on-beat)
+    let presetChance = 0.4; // 40% chance on a beat to start a preset (Standard Mode only)
+
+    // scoring
+    const SCORE_VALUES = {perfect:100, great:60, good:30, miss:0};
+
+    // ---------- State ----------
+    const lanesEl = document.getElementById('lanes');
+    const scoreEl = document.getElementById('score');
+    const comboEl = document.getElementById('combo');
+    const feedbackEl = document.getElementById('feedback');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    
+    // Slider elements
+    const scrollSlider = document.getElementById('scrollSlider');
+    const scrollDisplay = document.getElementById('scrollDisplay');
+    const bpmSlider = document.getElementById('bpmSlider');
+    const bpmDisplay = document.getElementById('bpmDisplay');
+    const spreadSlider = document.getElementById('spreadSlider');
+    const spreadDisplay = document.getElementById('spreadDisplay');
+    
+    // Mode Buttons
+    const modeButtons = {
+      standard: document.getElementById('mode-standard'),
+      waves: document.getElementById('mode-waves'),
+      jacks: document.getElementById('mode-jacks'),
+      streams: document.getElementById('mode-streams'),
+      chords: document.getElementById('mode-chords')
+    };
+    
+    // --- New Audio State ---
+    const tapBtn = document.getElementById('tapBtn');
+    const loadBtn = document.getElementById('loadBtn');
+    const fileInput = document.getElementById('fileInput');
+    const audioPlayer = document.getElementById('audioPlayer');
+    let tapTimestamps = [];
+
+    let lanes = []; // DOM lanes
+    let notes = []; // active notes
+    let lastSpawn = 0; // Timestamp of the last *on-beat* (metronome)
+    let lastFrame = performance.now();
+    let running = true;
+    let score = 0;
+    let combo = 0;
+    let totalHits = 0;
+    let startTime = performance.now();
+    
+    // --- Preset State ---
+    let currentGameMode = 'standard'; // 'standard', 'waves', 'jacks', etc.
+    let currentPreset = null; // e.g., PRESETS.jacks[0]
+    let presetNoteIndex = 0;  // which note in the preset we're at
+    let presetStartTime = 0;  // when the preset began
+    
+
+    // Create lane DOM
+    for(let i=0;i<4;i++){
+      const lane = document.createElement('div');
+      lane.className = 'lane';
+      lane.dataset.idx = i;
+      
+      const label = document.createElement('div');
+      label.className = 'key-label';
+      label.innerText = KEY_LABELS[i];
+      lane.appendChild(label);
+      
+      const pulse = document.createElement('div');
+      pulse.className = 'lane-pulse';
+      lane.appendChild(pulse);
+      
+      lanesEl.appendChild(lane);
+      lanes.push(lane);
+    }
+    
+    // =======================================================
+    // --- ✨ PRESET LIBRARY ✨ ---
+    // =======================================================
+    const PRESET_LIBRARY = {
+      waves: [
+        [ {time: 0, lanes: [0]}, {time: 0.5, lanes: [1]}, {time: 1, lanes: [2]}, {time: 1.5, lanes: [3]} ],
+        [ {time: 0, lanes: [3]}, {time: 0.5, lanes: [2]}, {time: 1, lanes: [1]}, {time: 1.5, lanes: [0]} ],
+        [ {time: 0, lanes: [0]}, {time: 0.5, lanes: [1]}, {time: 1, lanes: [2]}, {time: 1.5, lanes: [3]}, {time: 2, lanes: [2]}, {time: 2.5, lanes: [1]}, {time: 3, lanes: [0]} ],
+        [ {time: 0, lanes: [0]}, {time: 0.25, lanes: [1]}, {time: 0.5, lanes: [2]}, {time: 0.75, lanes: [1]}, {time: 1, lanes: [2]}, {time: 1.25, lanes: [3]}, {time: 1.5, lanes: [2]}, {time: 1.75, lanes: [1]} ],
+        [ {time: 0, lanes: [0]}, {time: 0.5, lanes: [3]}, {time: 1, lanes: [1]}, {time: 1.5, lanes: [2]} ]
+      ],
+      jacks: [
+        [ {time: 0, lanes: [0]}, {time: 0.5, lanes: [0]}, {time: 1, lanes: [2]}, {time: 1.5, lanes: [2]} ],
+        [ {time: 0, lanes: [1]}, {time: 0.25, lanes: [1]}, {time: 0.5, lanes: [1]}, {time: 1, lanes: [3]}, {time: 1.25, lanes: [3]}, {time: 1.5, lanes: [3]} ],
+        [ {time: 0, lanes: [2]}, {time: 0.25, lanes: [2]}, {time: 0.5, lanes: [2]}, {time: 0.75, lanes: [2]} ],
+        [ {time: 0, lanes: [0]}, {time: 0.5, lanes: [0]}, {time: 0.75, lanes: [0]}, {time: 1, lanes: [1]}, {time: 1.5, lanes: [1]}, {time: 1.75, lanes: [1]} ]
+      ],
+      streams: [
+        [ {time: 0, lanes: [0]}, {time: 0.25, lanes: [1]}, {time: 0.5, lanes: [0]}, {time: 0.75, lanes: [1]}, {time: 1, lanes: [2]}, {time: 1.25, lanes: [3]}, {time: 1.5, lanes: [2]}, {time: 1.75, lanes: [3]} ],
+        [ {time: 0, lanes: [1]}, {time: 0.25, lanes: [2]}, {time: 0.5, lanes: [1]}, {time: 0.75, lanes: [2]}, {time: 1, lanes: [1]}, {time: 1.25, lanes: [2]} ],
+        [ {time: 0, lanes: [0]}, {time: 0.25, lanes: [1]}, {time: 0.5, lanes: [2]}, {time: 0.75, lanes: [3]}, {time: 1, lanes: [0]}, {time: 1.25, lanes: [1]}, {time: 1.5, lanes: [2]}, {time: 1.75, lanes: [3]} ],
+        [ {time: 0, lanes: [0]}, {time: 0.5, lanes: [2]}, {time: 1, lanes: [1]}, {time: 1.5, lanes: [3]} ],
+      ],
+      chords: [
+        [ {time: 0, lanes: [0, 2]}, {time: 0.5, lanes: [1, 3]} ],
+        [ {time: 0, lanes: [0, 2]}, {time: 0.5, lanes: [1, 3]}, {time: 1, lanes: [0, 2]}, {time: 1.5, lanes: [1, 3]} ],
+        [ {time: 0, lanes: [0, 1]}, {time: 0.25, lanes: [2, 3]}, {time: 0.5, lanes: [0, 1]}, {time: 0.75, lanes: [2, 3]} ],
+        [ {time: 0, lanes: [0, 3]}, {time: 0.5, lanes: [1]}, {time: 1, lanes: [0, 3]}, {time: 1.5, lanes: [2]} ],
+        [ {time: 0, lanes: [0, 1]}, {time: 0.5, lanes: [0, 1]}, {time: 0.75, lanes: [2, 3]} ]
+      ]
+    };
+    
+    // Add all presets to the 'standard' list for variety
+    PRESET_LIBRARY.standard = [
+      ...PRESET_LIBRARY.waves,
+      ...PRESET_LIBRARY.jacks,
+      ...PRESET_LIBRARY.streams,
+      ...PRESET_LIBRARY.chords
+    ];
+    
+    // --- New: Mirror Preset Function ---
+    const mirrorMap = { 0: 3, 1: 2, 2: 1, 3: 0 };
+    function mirrorPreset(preset) {
+      // Create a new array (deep copy)
+      return preset.map(note => ({
+        time: note.time,
+        lanes: note.lanes.map(lane => mirrorMap[lane])
+      }));
+    }
+    // =======================================================
+    
+
+    // --- Particle Emitter Function ---
+    function createHitParticles(laneEl, accuracy) {
+      const stage = document.getElementById('stage');
+      const stageHeight = stage.clientHeight;
+      if (stageHeight === 0) return;
+      
+      const x = laneEl.offsetLeft + laneEl.offsetWidth / 2;
+      // --- THIS IS THE FIX ---
+      // Spawn particles at the hit line (90px from bottom)
+      const y = stageHeight - 90; 
+      
+      let color = (accuracy === 'perfect') ? 'var(--accent2)' : 'var(--accent)';
+      if (accuracy === 'good') color = 'var(--accent)';
+      if (accuracy === 'perfect') color = '#fff';
+
+      
+      for(let i = 0; i < 8; i++) { // Spawn 8 particles
+        const p = document.createElement('div');
+        p.className = 'particle';
+        p.style.background = color;
+        p.style.left = x + 'px';
+        p.style.top = y + 'px';
+        stage.appendChild(p);
+        
+        const randX = (Math.random() - 0.5) * 120;
+        const randY = (Math.random() - 0.5) * 60;
+        
+        p.animate([
+          { transform: 'translate(0, 0) scale(1)', opacity: 1 },
+          { transform: `translate(${randX}px, ${randY - 30}px) scale(0)`, opacity: 0 }
+        ], {
+          duration: 500 + Math.random() * 300,
+          easing: 'cubic-bezier(.17,.67,.6,1)'
+        });
+        
+        setTimeout(() => p.remove(), 800);
+      }
+    }
+
+
+    // --- Spawns a single note (used by presets) ---
+    function spawnSingleNote(col, now, beatType = 'beat', isChord = false) {
+      const el = document.createElement('div');
+      el.className = 'note';
+      el.classList.add('note-' + beatType);
+      
+      // --- NEW: Add chord class if it's a chord ---
+      if (isChord) {
+        el.classList.add('note-chord');
+      }
+      
+      lanes[col].appendChild(el);
+      // Set initial transform *after* appending
+      el.style.transform = `translate(-50%, ${SPAWN_Y}px)`;
+      
+      notes.push({
+        el, col, y: SPAWN_Y, spawnAt: now, 
+        beatType: beatType,
+        hit: false
+      });
+    }
+    
+    // --- Spawns random notes (Standard Mode only) ---
+    function spawnRandomNotes(now){
+      // Determine note count based on spreadChance
+      let numToSpawn = 1;
+      const rand = Math.random();
+      const chance4 = spreadChance / 4;
+      const chance3 = spreadChance / 2;
+      const chance2 = spreadChance;
+      if (rand < chance4) { numToSpawn = 4; }
+      else if (rand < chance3) { numToSpawn = 3; }
+      else if (rand < chance2) { numToSpawn = 2; }
+
+      const availableLanes = [0,1,2,3]; 
+      const isChord = numToSpawn > 1; // --- NEW: Check if it's a chord ---
+      
+      for(let i=0;i<numToSpawn;i++){
+        if(availableLanes.length===0) break; 
+        
+        const pickIdx = Math.floor(Math.random()*availableLanes.length);
+        const col = availableLanes.splice(pickIdx,1)[0];
+        
+        // --- UPDATED: Pass isChord flag ---
+        spawnSingleNote(col, now, 'beat', isChord);
+      }
+    }
+
+
+    // --- `update` function ---
+    function update(delta,now){
+      const laneHeight = lanes[0].clientHeight;
+      if (laneHeight === 0) return; // Skip frame if layout not ready
+      
+      const pixelsPerSec = baseSpeed * scrollMultiplier;
+      const pixelsPerMs = pixelsPerSec / 1000;
+      const dy = pixelsPerSec * (delta/1000);
+      
+      // --- THIS IS THE FIX ---
+      // laneHeight is (stage.height - padding.bottom)
+      // HIT_Y is (10px), the note's center from the bottom
+      // hitLineFromTop is now (laneHeight - 10px), which is the correct judgement position
+      const hitLineFromTop = laneHeight - HIT_Y;
+      const missThreshold = hitLineFromTop + TIMING.good / 1000 * pixelsPerSec + 40;
+
+      // 1. Update existing note positions and check for misses
+      for(let i=notes.length-1;i>=0;i--){
+        const n = notes[i];
+        if (!n || !n.el) continue; // Safety check
+        
+        n.y += dy;
+        n.el.style.transform = `translate(-50%,${n.y}px)`;
+
+        // Check for *missed heads*
+        if(!n.hit && n.y > missThreshold){
+          registerHit(null,'miss',n); 
+          notes.splice(i,1);         
+        }
+        // Remove notes that are way off-screen
+        else if(n.y > laneHeight + 200){
+          if(n.el.parentNode) n.el.remove();
+          notes.splice(i,1);
+        }
+      }
+
+      // 2. Metronome & Preset-starting Logic
+      if(now - lastSpawn > spawnInterval){
+        lastSpawn = now; // This is the main metronome tick
+        
+        if (!currentPreset) {
+          // No preset is playing, time to decide what's next
+          
+          if (currentGameMode === 'standard') {
+            // STANDARD MODE: Mix of random and presets
+            if (Math.random() < presetChance) {
+              const library = PRESET_LIBRARY.standard;
+              currentPreset = library[Math.floor(Math.random() * library.length)];
+              // 50% chance to mirror in standard mode too
+              if (Math.random() < 0.5) currentPreset = mirrorPreset(currentPreset);
+              presetNoteIndex = 0;
+              presetStartTime = now;
+            } else {
+              spawnRandomNotes(now);
+            }
+            
+          } else {
+            // PRACTICE MODE: Only presets, no random
+            const library = PRESET_LIBRARY[currentGameMode];
+            currentPreset = library[Math.floor(Math.random() * library.length)];
+            
+            // 50% chance to mirror
+            if (Math.random() < 0.5) {
+              currentPreset = mirrorPreset(currentPreset);
+            }
+            
+            presetNoteIndex = 0;
+            presetStartTime = now;
+          }
+        }
+      }
+
+      // 3. Preset Spawning Logic (runs every frame)
+      if (currentPreset) {
+        if (presetNoteIndex >= currentPreset.length) {
+          // --- Preset is finished ---
+          currentPreset = null;
+        } else {
+          const noteToSpawn = currentPreset[presetNoteIndex];
+          // Time (in ms) from the start of the preset
+          const noteTimeMs = noteToSpawn.time * spawnInterval; 
+          
+          if (now >= presetStartTime + noteTimeMs) {
+            
+            // Determine beat type
+            let beatType = 'sixteenth'; // Default for complex rhythms
+            if (noteToSpawn.time % 1 === 0) beatType = 'beat';
+            else if (noteToSpawn.time % 0.5 === 0) beatType = 'eighth';
+            
+            // --- NEW: Check if it's a chord ---
+            const isChord = noteToSpawn.lanes.length > 1;
+            
+            // Spawn all notes for this time (e.g., chords)
+            for (const col of noteToSpawn.lanes) {
+              // --- UPDATED: Pass isChord flag ---
+              spawnSingleNote(col, now, beatType, isChord);
+            }
+            
+            presetNoteIndex++; // Move to next note in preset
+          }
+        }
+      }
+      
+      // 4. Update HUD
+      scoreEl.innerText = score;
+      comboEl.innerText = combo;
+    }
+
+    function getClosestNoteInColumn(col){
+      const laneHeight = lanes[col].clientHeight; 
+      if (laneHeight === 0) return {note:null, dist:Infinity}; 
+      
+      // --- THIS IS THE FIX ---
+      const hitLineFromTop = laneHeight - HIT_Y; // (laneHeight - 10px)
+      let best = null;
+      let bestDist = Infinity;
+      for(const n of notes){
+        if(n.col!==col || n.hit) continue; 
+        const dist = Math.abs(n.y - hitLineFromTop);
+        if(dist < bestDist){best = n; bestDist=dist}
+      }
+      return {note:best,dist:bestDist};
+    }
+
+    // --- registerHit (for Taps) ---
+    function registerHit(key,accuracy,note){
+      if(accuracy==='miss'){
+        combo = 0;
+        showFeedback('MISS', 'miss');
+        // If we miss, and it's a note (not a random key press), remove its element
+        if(note && note.el && note.el.parentNode) {
+          note.el.remove();
+        }
+      } else {
+        combo += 1;
+        // --- Combo Pop ---
+        comboEl.classList.add('combo-pop');
+        setTimeout(() => comboEl.classList.remove('combo-pop'), 200);
+        
+        const val = SCORE_VALUES[accuracy] || 0;
+        score += val * Math.max(1, Math.floor(combo/10));
+        totalHits += 1;
+        showFeedback(accuracy.toUpperCase(), accuracy);
+        if(note){
+          note.hit = true;
+        }
+      }
+    }
+    
+    // --- Updated showFeedback (colors) ---
+    function showFeedback(text, accuracyKey){
+      feedbackEl.style.display = 'block';
+      feedbackEl.innerText = text;
+      
+      let color = (accuracyKey === 'perfect') ? 'var(--accent2)' : 'var(--accent)';
+      if(accuracyKey === 'good') color = 'var(--accent)';
+      if(accuracyKey === 'miss') color = '#ff4040'; // Give miss a red color
+      if(accuracyKey === 'perfect') color = '#fff';
+
+      feedbackEl.style.color = color;
+      
+      feedbackEl.animate([{opacity:1, transform:'translateX(-50%) translateY(0)'},{opacity:0, transform:'translateX(-50%) translateY(-20px)'}],{duration:550,easing:'cubic-bezier(.2,.8,.2,1)'});
+      setTimeout(()=>{feedbackEl.style.display='none'},520);
+    }
+
+    // --- UPDATED handleKeyPress with "Miss Window" ---
+    function handleKeyPress(idx){
+      const laneHeight = lanes[idx].clientHeight;
+      if (laneHeight === 0) return; 
+      
+      const key = KEYS[idx];
+      // --- THIS IS THE FIX ---
+      const hitLineFromTop = laneHeight - HIT_Y; // (laneHeight - 10px)
+      const pixelsPerMs = baseSpeed * scrollMultiplier / 1000;
+
+      const {note: best, dist} = getClosestNoteInColumn(idx);
+      
+      // --- Lane Pulse ---
+      const pulseEl = lanes[idx].querySelector('.lane-pulse');
+      if (pulseEl) {
+        pulseEl.animate([
+          { opacity: 1, transform: 'scale(1)' },
+          { opacity: 0, transform: 'scale(1.2)' }
+        ], { duration: 250, easing: 'ease-out' });
+      }
+      
+      if(!best){ 
+        registerHit(key,'miss',null); // Missed (hit totally empty lane)
+        return; 
+      }
+      
+      const msOffset = (best.y - hitLineFromTop) / pixelsPerMs; // ms
+      const absOffset = Math.abs(msOffset);
+      
+      let accuracy = null;
+      if(absOffset <= TIMING.perfect) accuracy='perfect';
+      else if(absOffset <= TIMING.great) accuracy='great';
+      else if(absOffset <= TIMING.good) accuracy='good';
+      
+      if(accuracy){ 
+        // --- IT'S A HIT! ---
+        registerHit(key,accuracy,best); 
+        createHitParticles(lanes[idx], accuracy);
+        
+        if(best.el.parentNode) best.el.remove(); 
+        notes = notes.filter(n=>n!==best); 
+      
+      } else if (absOffset <= TIMING.miss) {
+        // --- IT'S A "BAD" MISS ---
+        // Outside 'good' window, but close enough to count as an attempt.
+        registerHit(key,'miss',best); 
+        if(best.el.parentNode) best.el.remove(); // Remove the note they were trying to hit
+        notes = notes.filter(n => n !== best); 
+      
+      } else {
+        // --- IT'S AN "EMPTY LANE" MISS ---
+        // Note was too far away to interact with.
+        registerHit(key,'miss',null); // Register a miss, but don't pass the 'best' note
+        // *Do not remove the note*
+      }
+    }
+
+    // --- keyboard listeners ---
+    window.addEventListener('keydown',e=>{
+      if (e.repeat) return; 
+      if(!running) return;
+      const k = e.key.toLowerCase();
+      
+      if(k===' '){ 
+        running = !running; 
+        pauseBtn.innerText = running? 'Pause' : 'Resume'; 
+        if (running) {
+          lastFrame = performance.now();
+          if (audioPlayer.src) audioPlayer.play();
+        } else {
+          if (audioPlayer.src) audioPlayer.pause();
+        }
+        return; 
+      }
+      
+      const idx = KEYS.indexOf(k);
+      if(idx !== -1){
+        handleKeyPress(idx);
+      }
+    });
+    
+    pauseBtn.addEventListener('click',()=>{ 
+      running = !running; 
+      pauseBtn.innerText = running? 'Pause' : 'Resume'; 
+      if (running) {
+        lastFrame = performance.now();
+        if (audioPlayer.src) audioPlayer.play();
+      } else {
+        if (audioPlayer.src) audioPlayer.pause();
+      }
+    });
+    
+    resetBtn.addEventListener('click',()=>{ resetGame(true); }); // true = full reset
+
+    // --- Slider Event Listeners ---
+    scrollSlider.addEventListener('input', (e) => {
+      scrollMultiplier = parseFloat(e.target.value);
+      scrollDisplay.innerText = scrollMultiplier.toFixed(1) + 'x';
+    });
+
+    bpmSlider.addEventListener('input', (e) => {
+      bpm = parseFloat(e.target.value);
+      bpmDisplay.innerText = bpm.toFixed(0);
+      spawnInterval = (60 * 1000) / bpm; // Update spawn interval
+    });
+    
+    spreadSlider.addEventListener('input', (e) => {
+      spreadChance = parseFloat(e.target.value);
+      spreadDisplay.innerText = (spreadChance * 100).toFixed(0) + '%';
+    });
+    
+    // --- New: Mode Button Listeners ---
+    function setGameMode(newMode) {
+      // Set new mode
+      currentGameMode = newMode;
+      
+      // Update button visual state
+      for (const key in modeButtons) {
+        modeButtons[key].classList.remove('active');
+      }
+      modeButtons[newMode].classList.add('active');
+      
+      // Instantly reset the game to apply the mode
+      resetGame(false); // 'false' to not reset sliders
+    }
+    
+    modeButtons.standard.addEventListener('click', () => setGameMode('standard'));
+    modeButtons.waves.addEventListener('click', () => setGameMode('waves'));
+    modeButtons.jacks.addEventListener('click', () => setGameMode('jacks'));
+    modeButtons.streams.addEventListener('click', () => setGameMode('streams'));
+    modeButtons.chords.addEventListener('click', () => setGameMode('chords'));
+
+    
+    // --- New: Audio Button Listeners ---
+    loadBtn.addEventListener('click', () => {
+      fileInput.click(); // Trigger hidden file input
+    });
+    
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      const url = URL.createObjectURL(file);
+      audioPlayer.src = url;
+      resetGame(false); // Reset to apply song
+      
+      // Auto-play
+      running = true;
+      pauseBtn.innerText = 'Pause';
+      lastFrame = performance.now();
+      audioPlayer.play();
+    });
+    
+    tapBtn.addEventListener('click', () => {
+      const now = performance.now();
+      tapTimestamps.push(now);
+      
+      // Keep only the last 4 taps
+      if (tapTimestamps.length > 4) {
+        tapTimestamps.shift();
+      }
+      
+      // Animate tap
+      tapBtn.animate([{transform: 'scale(1.1)', background: 'var(--accent)'},{transform: 'scale(1)', background: 'transparent'}], {duration: 150});
+      
+      if (tapTimestamps.length === 4) {
+        // Calculate average interval
+        const diffs = [];
+        for (let i=1; i < tapTimestamps.length; i++) {
+          diffs.push(tapTimestamps[i] - tapTimestamps[i-1]);
+        }
+        const avgInterval = diffs.reduce((a, b) => a + b, 0) / diffs.length;
+        
+        // Calculate BPM
+        const newBPM = (60 * 1000) / avgInterval;
+        bpm = Math.round(newBPM);
+        
+        // Update game
+        spawnInterval = (60 * 1000) / bpm;
+        bpmSlider.value = bpm;
+        bpmDisplay.innerText = bpm;
+        
+        // Reset tap history
+        tapTimestamps = [];
+      }
+    });
+
+    
+    // --- resetGame function (simplified) ---
+    function resetGame(resetSettings = true){
+      // clear notes
+      for(const n of notes){ if(n.el.parentNode) n.el.remove(); }
+      notes = [];
+      score = 0; combo = 0; totalHits = 0;
+      
+      // --- Audio Reset ---
+      audioPlayer.pause();
+      audioPlayer.currentTime = 0;
+      tapTimestamps = []; // Clear tap history
+      
+      if (resetSettings) {
+        // Reset variables to default
+        scrollMultiplier = 1.0; 
+        bpm = 120;
+        spreadChance = 0.15;
+        spawnInterval = (60 * 1000) / bpm;
+        
+        // Reset sliders and displays
+        scrollSlider.value = 1.0;
+        scrollDisplay.innerText = '1.0x';
+        bpmSlider.value = 120;
+        bpmDisplay.innerText = '120';
+        spreadSlider.value = 0.15;
+        spreadDisplay.innerText = '15%';
+        
+        // Reset mode
+        setGameMode('standard');
+        
+        // Clear audio source
+        audioPlayer.src = "";
+        fileInput.value = ""; // Clear file input
+      }
+      
+      // Reset state
+      currentPreset = null;
+      presetNoteIndex = 0;
+      
+      // Reset game state
+      running = true;
+      pauseBtn.innerText = 'Pause';
+      lastFrame = performance.now();
+      lastSpawn = performance.now();
+      startTime = performance.now();
+    }
+
+    // initial spawn timestamp
+    lastSpawn = performance.now();
+    lastFrame = performance.now();
+
+    function frame(now){
+      const delta = now - lastFrame;
+      lastFrame = now;
+      
+      if(running) update(delta,now);
+      requestAnimationFrame(frame); // <--- This line runs the game
+    }
+    
+    // --- This line starts the game loop ---
+    requestAnimationFrame(frame);
+
+    document.title = 'Minimal Rhythm — Press D F J K';
+  </script>
+</body>
+</html>
